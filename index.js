@@ -42,6 +42,8 @@ async function run() {
       res.send({ token })
     })
 
+    // registration related api
+
     app.post("/register", async (req, res) => {
       const userData = req.body;
       const { email, pin } = req.body
@@ -62,10 +64,10 @@ async function run() {
       res.send(result)
     })
 
-
+// login related api
     app.post("/login", async (req, res) => {
       const { email, phoneNumber, pin } = req.body;
-      console.log(email)
+      // console.log(email)
 
       if (!email && !phoneNumber) {
         return res.status(400).send("Please provide either an email or a phone number.");
@@ -77,7 +79,7 @@ async function run() {
         if (phoneNumber) {
           const query = { phoneNumber: phoneNumber }
           userData = await userCollection.findOne(query);
-          console.log(userData)
+          // console.log(userData)
         } else if (email) {
           const query = { email: email }
           userData = await userCollection.findOne(query);
@@ -95,7 +97,7 @@ async function run() {
 
         res.send(userData);
       } catch (error) {
-        console.error('Error during login:', error);
+        // console.error('Error during login:', error);
         return res.status(400).send("Please create an account first ");
       }
 
