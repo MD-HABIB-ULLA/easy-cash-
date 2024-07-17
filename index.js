@@ -35,6 +35,50 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
+
+    const verifytoken = (req, res, next) => {
+      // console.log('inside verify token', req.headers.authorization);
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: 'unauthorized access' });
+      }
+      const token = req.headers.authorization.split(' ')[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: 'unauthorized access' })
+        }
+        req.decoded = decoded;
+
+        next();
+      })
+    }
+
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === 'admin';
+      if (!isAdmin) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+
+      next();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // jwt related api--------------------------------------
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -83,7 +127,7 @@ async function run() {
         } else if (email) {
           const query = { email: email }
           userData = await userCollection.findOne(query);
-          console.log("email", userData)
+          // console.log("email", userData)
         }
 
         if (!userData) {
@@ -103,7 +147,7 @@ async function run() {
 
     })
 
-    app.get("/alluser", async (req, res) => {
+    app.get("/alluser",verifytoken,verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray()
       const pendingUsers = await pendingUserCollection.find().toArray()
       res.send({ users, pendingUsers })
