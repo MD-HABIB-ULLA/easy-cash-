@@ -30,7 +30,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
 
-    const PendingUserCollection = client.db("easycash").collection("pendingUsers")
+    const pendingUserCollection = client.db("easycash").collection("pendingUsers")
     const userCollection = client.db("easycash").collection("users")
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
@@ -53,18 +53,18 @@ async function run() {
       }
 
       // Check if user exists in PendingUserCollection
-      const pendingUserExists = await PendingUserCollection.findOne({ email });
+      const pendingUserExists = await pendingUserCollection.findOne({ email });
       if (pendingUserExists) {
         return res.status(400).send("please wait until the admin validates your profile ");
       }
       const hashedPin = await bcrypt.hash(pin, 10);
       userData.pin = hashedPin;
 
-      const result = await PendingUserCollection.insertOne(userData)
+      const result = await pendingUserCollection.insertOne(userData)
       res.send(result)
     })
 
-// login related api
+    // login related api
     app.post("/login", async (req, res) => {
       const { email, phoneNumber, pin } = req.body;
       // console.log(email)
@@ -103,7 +103,11 @@ async function run() {
 
     })
 
-
+    app.get("/alluser", async (req, res) => {
+      const users = await userCollection.find().toArray()
+      const pendingUsers = await pendingUserCollection.find().toArray()
+      res.send({ users, pendingUsers })
+    })
     app.get('/', (req, res) => {
       res.send('Hello World!')
     })
