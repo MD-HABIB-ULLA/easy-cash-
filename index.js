@@ -147,6 +147,13 @@ async function run() {
 
     })
 
+    // user approve related apis 
+    app.delete("/approve", async (req, res)=>{
+      const {id, pin} = req.query
+      console.log(id, pin)
+      res.send("hello")
+    })
+
     app.get("/alluser",verifytoken,verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray()
       const pendingUsers = await pendingUserCollection.find().toArray()
