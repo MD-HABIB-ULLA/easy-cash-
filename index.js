@@ -15,7 +15,7 @@ app.use(cors({
 app.use(express.json())
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zqymdgy.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -148,13 +148,41 @@ async function run() {
     })
 
     // user approve related apis 
-    app.delete("/approve", async (req, res)=>{
-      const {id, pin} = req.query
-      console.log(id, pin)
-      res.send("hello")
-    })
+    app.delete("/approve", async (req, res) => {
+      try {
+        const { id, pin, email } = req.query;
+        console.log(id, pin, email);
 
-    app.get("/alluser",verifytoken,verifyAdmin, async (req, res) => {
+        let userData;
+        if (email) {
+          const query = { email: email };
+          userData = await userCollection.findOne(query);
+        }
+
+
+        const isPinValid = await bcrypt.compare(pin, userData.pin);
+        if (isPinValid) {
+          const query = { _id: new ObjectId(id) };
+          const pendingUser = await pendingUserCollection.findOne(query);
+          const role = pendingUser.appliedRole ? pendingUser.appliedRole : "user";
+          pendingUser.role = role;
+         if(pendingUser.appliedRole){
+          delete pendingUser.appliedRole;
+         }
+          res.send(pendingUser)
+        } else {
+          return res.send('Invalid PIN');
+        }
+
+
+      } catch (error) {
+        console.error("Error approving user:", error);
+        res.status(500).send('Internal server error');
+      }
+    });
+
+
+    app.get("/alluser", verifytoken, verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray()
       const pendingUsers = await pendingUserCollection.find().toArray()
       res.send({ users, pendingUsers })
