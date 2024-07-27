@@ -32,6 +32,7 @@ async function run() {
 
     const pendingUserCollection = client.db("easycash").collection("pendingUsers")
     const userCollection = client.db("easycash").collection("users")
+    const allTransitions = client.db("easycash").collection("transitions")
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
@@ -166,9 +167,21 @@ async function run() {
           const pendingUser = await pendingUserCollection.findOne(query);
           const role = pendingUser.appliedRole ? pendingUser.appliedRole : "user";
           pendingUser.role = role;
-         if(pendingUser.appliedRole){
-          delete pendingUser.appliedRole;
-         }
+          if (pendingUser.appliedRole) {
+            delete pendingUser.appliedRole;
+          }
+          pendingUser.balance = 40;
+          const currentDate = new Date();
+          const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1
+            }/${currentDate.getFullYear()}`;
+          // add this transition to data base 
+          const transitionDetails = {
+            email: pendingUser.email,
+            amount: pendingUser.balance,
+            from: "admin",
+            time: formattedDate 
+          }
+          console.log(transitionDetails)
           res.send(pendingUser)
         } else {
           return res.send('Invalid PIN');
