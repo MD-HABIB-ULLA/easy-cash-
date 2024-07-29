@@ -148,51 +148,87 @@ async function run() {
 
     })
 
+
+
+
+
+
+
     // user approve related apis 
-    app.delete("/approve", async (req, res) => {
-      try {
-        const { id, pin, email } = req.query;
-        console.log(id, pin, email);
+  app.delete("/approve", async (req, res) => {
+  try {
+    const { id, pin, email } = req.query;
+    console.log(id, pin, email);
 
-        let userData;
-        if (email) {
-          const query = { email: email };
-          userData = await userCollection.findOne(query);
-        }
+    if (!id || !pin || !email) {
+      return res.status(400).send('Missing required parameters');
+    }
 
+    // Function to get user data by email
+    const getUserDataByEmail = async (email) => {
+      return await userCollection.findOne({ email });
+    };
 
-        const isPinValid = await bcrypt.compare(pin, userData.pin);
-        if (isPinValid) {
-          const query = { _id: new ObjectId(id) };
-          const pendingUser = await pendingUserCollection.findOne(query);
-          const role = pendingUser.appliedRole ? pendingUser.appliedRole : "user";
-          pendingUser.role = role;
-          if (pendingUser.appliedRole) {
-            delete pendingUser.appliedRole;
-          }
-          pendingUser.balance = 40;
-          const currentDate = new Date();
-          const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1
-            }/${currentDate.getFullYear()}`;
-          // add this transition to data base 
-          const transitionDetails = {
-            email: pendingUser.email,
-            amount: pendingUser.balance,
-            from: "admin",
-            time: formattedDate 
-          }
-          console.log(transitionDetails)
-          res.send(pendingUser)
-        } else {
-          return res.send('Invalid PIN');
-        }
+    // Get user data
+    const userData = await getUserDataByEmail(email);
+    if (!userData) {
+      return res.status(404).send('User not found');
+    }
 
+    // Validate PIN
+    const isPinValid = await bcrypt.compare(pin, userData.pin);
+    if (!isPinValid) {
+      return res.status(401).send('Invalid PIN');
+    }
 
-      } catch (error) {
-        console.error("Error approving user:", error);
-        res.status(500).send('Internal server error');
-      }
-    });
+    // Get pending user data
+    const pendingUser = await pendingUserCollection.findOne({ _id: new ObjectId(id) });
+    if (!pendingUser) {
+      return res.status(404).send('Pending user not found');
+    }
+
+    // Set role and balance
+    const role = pendingUser.appliedRole || "user";
+    pendingUser.role = role;
+    delete pendingUser.appliedRole;
+    pendingUser.balance = 40;
+
+    // Create transition details
+    const currentDate = new Date();
+    const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`;
+    const transitionDetails = {
+      email: pendingUser.email,
+      amount: pendingUser.balance,
+      from: "admin",
+      time: formattedDate
+    };
+
+    // Insert transition details
+    const transitionResult = await allTransitions.insertOne(transitionDetails);
+    if (!transitionResult.acknowledged) {
+      throw new Error('Failed to insert transition details');
+    }
+
+    // Add pending user to user collection
+    const addUserResult = await userCollection.insertOne(pendingUser);
+    if (!addUserResult.acknowledged) {
+      throw new Error('Failed to add user to collection');
+    }
+
+    // Remove pending user from pending collection
+    const deletePendingUserResult = await pendingUserCollection.deleteOne({ email: pendingUser.email });
+    if (!deletePendingUserResult.acknowledged) {
+      throw new Error('Failed to delete pending user');
+    }
+
+    // Send success response
+    res.send(deletePendingUserResult);
+
+  } catch (error) {
+    console.error("Error approving user:", error);
+    res.status(500).send('Internal server error');
+  }
+});
 
 
     app.get("/alluser", verifytoken, verifyAdmin, async (req, res) => {
