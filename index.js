@@ -87,7 +87,7 @@ async function run() {
       res.send({ token })
     })
 
-    // registration related api
+    // registration related api---------------------------------------------
 
     app.post("/register", async (req, res) => {
       const userData = req.body;
@@ -109,7 +109,7 @@ async function run() {
       res.send(result)
     })
 
-    // login related api
+    // login related api------------------------------------------------------
     app.post("/login", async (req, res) => {
       const { email, phoneNumber, pin } = req.body;
       // console.log(email)
@@ -148,14 +148,20 @@ async function run() {
 
     })
 
+    // all transitions for admin 
+    app.get('/allTransitions', async(req, res)=> {
+      const result = await allTransitions.find().toArray()
+      res.send(result)
+    })
 
 
 
 
 
 
-    // user approve related apis 
-  app.delete("/approve", async (req, res) => {
+
+    // user approve related apis----------------------------------------------------- 
+  app.delete("/approve",verifytoken, verifyAdmin, async (req, res) => {
   try {
     const { id, pin, email } = req.query;
     console.log(id, pin, email);
@@ -221,6 +227,33 @@ async function run() {
       throw new Error('Failed to delete pending user');
     }
 
+ // Update admin balance when they approve someone
+ const query = { email: userData.email };
+ const options = { upsert: true };
+
+ // Ensure userData.balance is a number before subtracting
+ const adminBalance = parseFloat(userData.balance);
+ if (isNaN(adminBalance)) {
+   return res.status(400).send('Invalid admin balance');
+ }
+
+ const updatedData = {
+   $set: {
+     balance: adminBalance - 40,
+   }
+ };
+
+ try {
+   const updateAdminBalance = await userCollection.updateOne(query, updatedData, options);
+   if (!updateAdminBalance.acknowledged) {
+     throw new Error('Failed to update admin balance');
+   }
+ } catch (error) {
+   console.error("Error updating admin balance:", error);
+   return res.status(500).send('Failed to update admin balance');
+ }
+
+
     // Send success response
     res.send(deletePendingUserResult);
 
@@ -229,6 +262,34 @@ async function run() {
     res.status(500).send('Internal server error');
   }
 });
+
+// delete user from pending data base 
+
+app.delete('/deleteUser',async(req, res)=>{
+  const {id, pin, email} = req.query
+  console.log(id, pin, email)
+
+
+  const getUserDataByEmail = async (email) => {
+    return await userCollection.findOne({ email });
+  };
+
+  // Get user data
+  const userData = await getUserDataByEmail(email);
+  if (!userData) {
+    return res.status(404).send('User not found');
+  }
+
+  // Validate PIN
+  const isPinValid = await bcrypt.compare(pin, userData.pin);
+  if (!isPinValid) {
+    return res.status(401).send('Invalid PIN');
+  }
+
+  // Get pending user data
+  const result = await pendingUserCollection.deleteOne({ _id: new ObjectId(id) });
+  res.send(result)
+})
 
 
     app.get("/alluser", verifytoken, verifyAdmin, async (req, res) => {
