@@ -148,8 +148,8 @@ async function run() {
 
     })
 
-    // all transitions for admin 
-    app.get('/allTransitions', async(req, res)=> {
+    // all transitions for admin-----------------------------------------------
+    app.get('/allTransitions',verifytoken, verifyAdmin, async (req, res) => {
       const result = await allTransitions.find().toArray()
       res.send(result)
     })
@@ -161,137 +161,138 @@ async function run() {
 
 
     // user approve related apis----------------------------------------------------- 
-  app.delete("/approve",verifytoken, verifyAdmin, async (req, res) => {
-  try {
-    const { id, pin, email } = req.query;
-    console.log(id, pin, email);
+    app.delete("/approve", verifytoken, verifyAdmin, async (req, res) => {
+      try {
+        const { id, pin, email } = req.query;
+        console.log(id, pin, email);
 
-    if (!id || !pin || !email) {
-      return res.status(400).send('Missing required parameters');
-    }
+        if (!id || !pin || !email) {
+          return res.status(400).send('Missing required parameters');
+        }
 
-    // Function to get user data by email
-    const getUserDataByEmail = async (email) => {
-      return await userCollection.findOne({ email });
-    };
+        // Function to get user data by email
+        const getUserDataByEmail = async (email) => {
+          return await userCollection.findOne({ email });
+        };
 
-    // Get user data
-    const userData = await getUserDataByEmail(email);
-    if (!userData) {
-      return res.status(404).send('User not found');
-    }
+        // Get user data
+        const userData = await getUserDataByEmail(email);
+        if (!userData) {
+          return res.status(404).send('User not found');
+        }
 
-    // Validate PIN
-    const isPinValid = await bcrypt.compare(pin, userData.pin);
-    if (!isPinValid) {
-      return res.status(401).send('Invalid PIN');
-    }
+        // Validate PIN
+        const isPinValid = await bcrypt.compare(pin, userData.pin);
+        if (!isPinValid) {
+          return res.status(401).send('Invalid PIN');
+        }
 
-    // Get pending user data
-    const pendingUser = await pendingUserCollection.findOne({ _id: new ObjectId(id) });
-    if (!pendingUser) {
-      return res.status(404).send('Pending user not found');
-    }
+        // Get pending user data
+        const pendingUser = await pendingUserCollection.findOne({ _id: new ObjectId(id) });
+        if (!pendingUser) {
+          return res.status(404).send('Pending user not found');
+        }
 
-    // Set role and balance
-    const role = pendingUser.appliedRole || "user";
-    pendingUser.role = role;
-    delete pendingUser.appliedRole;
-    pendingUser.balance = 40;
+        // Set role and balance
+        const role = pendingUser.appliedRole || "user";
+        pendingUser.role = role;
+        delete pendingUser.appliedRole;
+        pendingUser.balance = 40;
 
-    // Create transition details
-    const currentDate = new Date();
-    const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`;
-    const transitionDetails = {
-      email: pendingUser.email,
-      amount: pendingUser.balance,
-      from: "admin",
-      time: formattedDate
-    };
+        // Create transition details
+        const currentDate = new Date();
+        const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`;
+        const transitionDetails = {
+          email: pendingUser.email,
+          amount: pendingUser.balance,
+          from: "admin",
+          time: formattedDate
+        };
 
-    // Insert transition details
-    const transitionResult = await allTransitions.insertOne(transitionDetails);
-    if (!transitionResult.acknowledged) {
-      throw new Error('Failed to insert transition details');
-    }
+        // Insert transition details
+        const transitionResult = await allTransitions.insertOne(transitionDetails);
+        if (!transitionResult.acknowledged) {
+          throw new Error('Failed to insert transition details');
+        }
 
-    // Add pending user to user collection
-    const addUserResult = await userCollection.insertOne(pendingUser);
-    if (!addUserResult.acknowledged) {
-      throw new Error('Failed to add user to collection');
-    }
+        // Add pending user to user collection
+        const addUserResult = await userCollection.insertOne(pendingUser);
+        if (!addUserResult.acknowledged) {
+          throw new Error('Failed to add user to collection');
+        }
 
-    // Remove pending user from pending collection
-    const deletePendingUserResult = await pendingUserCollection.deleteOne({ email: pendingUser.email });
-    if (!deletePendingUserResult.acknowledged) {
-      throw new Error('Failed to delete pending user');
-    }
+        // Remove pending user from pending collection
+        const deletePendingUserResult = await pendingUserCollection.deleteOne({ email: pendingUser.email });
+        if (!deletePendingUserResult.acknowledged) {
+          throw new Error('Failed to delete pending user');
+        }
 
- // Update admin balance when they approve someone
- const query = { email: userData.email };
- const options = { upsert: true };
+        // Update admin balance when they approve someone
+        const query = { email: userData.email };
+        const options = { upsert: true };
 
- // Ensure userData.balance is a number before subtracting
- const adminBalance = parseFloat(userData.balance);
- if (isNaN(adminBalance)) {
-   return res.status(400).send('Invalid admin balance');
- }
+        // Ensure userData.balance is a number before subtracting
+        const adminBalance = parseFloat(userData.balance);
+        if (isNaN(adminBalance)) {
+          return res.status(400).send('Invalid admin balance');
+        }
 
- const updatedData = {
-   $set: {
-     balance: adminBalance - 40,
-   }
- };
+        const updatedData = {
+          $set: {
+            balance: adminBalance - 40,
+          }
+        };
 
- try {
-   const updateAdminBalance = await userCollection.updateOne(query, updatedData, options);
-   if (!updateAdminBalance.acknowledged) {
-     throw new Error('Failed to update admin balance');
-   }
- } catch (error) {
-   console.error("Error updating admin balance:", error);
-   return res.status(500).send('Failed to update admin balance');
- }
-
-
-    // Send success response
-    res.send(deletePendingUserResult);
-
-  } catch (error) {
-    console.error("Error approving user:", error);
-    res.status(500).send('Internal server error');
-  }
-});
-
-// delete user from pending data base 
-
-app.delete('/deleteUser',async(req, res)=>{
-  const {id, pin, email} = req.query
-  console.log(id, pin, email)
+        try {
+          const updateAdminBalance = await userCollection.updateOne(query, updatedData, options);
+          if (!updateAdminBalance.acknowledged) {
+            throw new Error('Failed to update admin balance');
+          }
+        } catch (error) {
+          console.error("Error updating admin balance:", error);
+          return res.status(500).send('Failed to update admin balance');
+        }
 
 
-  const getUserDataByEmail = async (email) => {
-    return await userCollection.findOne({ email });
-  };
+        // Send success response
+        res.send(deletePendingUserResult);
 
-  // Get user data
-  const userData = await getUserDataByEmail(email);
-  if (!userData) {
-    return res.status(404).send('User not found');
-  }
+      } catch (error) {
+        console.error("Error approving user:", error);
+        res.status(500).send('Internal server error');
+      }
+    });
 
-  // Validate PIN
-  const isPinValid = await bcrypt.compare(pin, userData.pin);
-  if (!isPinValid) {
-    return res.status(401).send('Invalid PIN');
-  }
+    // delete user from pending data base ------------------------------------------
 
-  // Get pending user data
-  const result = await pendingUserCollection.deleteOne({ _id: new ObjectId(id) });
-  res.send(result)
-})
+    app.delete('/deleteUser', async (req, res) => {
+      const { id, pin, email } = req.query
+      console.log(id, pin, email)
 
 
+      const getUserDataByEmail = async (email) => {
+        return await userCollection.findOne({ email });
+      };
+
+      // Get user data
+      const userData = await getUserDataByEmail(email);
+      if (!userData) {
+        return res.status(404).send('User not found');
+      }
+
+      // Validate PIN
+      const isPinValid = await bcrypt.compare(pin, userData.pin);
+      if (!isPinValid) {
+        return res.status(401).send('Invalid PIN');
+      }
+
+      // Get pending user data
+      const result = await pendingUserCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result)
+    })
+
+
+    //  all user data ------------------------------------------------------------
     app.get("/alluser", verifytoken, verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray()
       const pendingUsers = await pendingUserCollection.find().toArray()
