@@ -33,6 +33,7 @@ async function run() {
     const pendingUserCollection = client.db("easycash").collection("pendingUsers")
     const userCollection = client.db("easycash").collection("users")
     const allTransitions = client.db("easycash").collection("transitions")
+    const pendingTransition = client.db("easycash").collection("pendingTransitions")
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
@@ -149,7 +150,7 @@ async function run() {
     })
 
     // all transitions for admin-----------------------------------------------
-    app.get('/allTransitions',verifytoken, verifyAdmin, async (req, res) => {
+    app.get('/allTransitions', verifytoken, verifyAdmin, async (req, res) => {
       const result = await allTransitions.find().toArray()
       res.send(result)
     })
@@ -161,6 +162,10 @@ async function run() {
 
 
     // user approve related apis----------------------------------------------------- 
+    const getAdminDataByEmail = async (email) => {
+      return await userCollection.findOne({ email });
+    };
+
     app.delete("/approve", verifytoken, verifyAdmin, async (req, res) => {
       try {
         const { id, pin, email } = req.query;
@@ -170,19 +175,14 @@ async function run() {
           return res.status(400).send('Missing required parameters');
         }
 
-        // Function to get user data by email
-        const getUserDataByEmail = async (email) => {
-          return await userCollection.findOne({ email });
-        };
-
-        // Get user data
-        const userData = await getUserDataByEmail(email);
-        if (!userData) {
+        // Get admin data
+        const adminData = await getAdminDataByEmail(email);
+        if (!adminData) {
           return res.status(404).send('User not found');
         }
 
         // Validate PIN
-        const isPinValid = await bcrypt.compare(pin, userData.pin);
+        const isPinValid = await bcrypt.compare(pin, adminData.pin);
         if (!isPinValid) {
           return res.status(401).send('Invalid PIN');
         }
@@ -196,24 +196,12 @@ async function run() {
         // Set role and balance
         const role = pendingUser.appliedRole || "user";
         pendingUser.role = role;
-        delete pendingUser.appliedRole;
-        pendingUser.balance = 40;
-
-        // Create transition details
-        const currentDate = new Date();
-        const formattedDate = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`;
-        const transitionDetails = {
-          email: pendingUser.email,
-          amount: pendingUser.balance,
-          from: "admin",
-          time: formattedDate
-        };
-
-        // Insert transition details
-        const transitionResult = await allTransitions.insertOne(transitionDetails);
-        if (!transitionResult.acknowledged) {
-          throw new Error('Failed to insert transition details');
+        if (role === "agent") {
+          pendingUser.balance = 10000;
+        } else {
+          pendingUser.balance = 40;
         }
+        delete pendingUser.appliedRole;
 
         // Add pending user to user collection
         const addUserResult = await userCollection.insertOne(pendingUser);
@@ -222,37 +210,10 @@ async function run() {
         }
 
         // Remove pending user from pending collection
-        const deletePendingUserResult = await pendingUserCollection.deleteOne({ email: pendingUser.email });
+        const deletePendingUserResult = await pendingUserCollection.deleteOne({ _id: new ObjectId(id) });
         if (!deletePendingUserResult.acknowledged) {
           throw new Error('Failed to delete pending user');
         }
-
-        // Update admin balance when they approve someone
-        const query = { email: userData.email };
-        const options = { upsert: true };
-
-        // Ensure userData.balance is a number before subtracting
-        const adminBalance = parseFloat(userData.balance);
-        if (isNaN(adminBalance)) {
-          return res.status(400).send('Invalid admin balance');
-        }
-
-        const updatedData = {
-          $set: {
-            balance: adminBalance - 40,
-          }
-        };
-
-        try {
-          const updateAdminBalance = await userCollection.updateOne(query, updatedData, options);
-          if (!updateAdminBalance.acknowledged) {
-            throw new Error('Failed to update admin balance');
-          }
-        } catch (error) {
-          console.error("Error updating admin balance:", error);
-          return res.status(500).send('Failed to update admin balance');
-        }
-
 
         // Send success response
         res.send(deletePendingUserResult);
@@ -298,6 +259,37 @@ async function run() {
       const pendingUsers = await pendingUserCollection.find().toArray()
       res.send({ users, pendingUsers })
     })
+
+    //  load all agent details -----------------------------------------------
+    app.get("/allAgent", async (req, res) => {
+      const result = await userCollection.find({ role: "agent" }).toArray()
+      res.send(result)
+    })
+
+    // post cash in details 
+
+    app.post("/cashIn", async (req, res) => {
+      const data = req.body
+      const existingRequest = await pendingTransition.findOne({userEmail : data.userEmail} );
+      if (existingRequest) {
+        return res.status(400).json({ error: 'A cash-in request has already been made for this user.' });
+      }
+      const result = await pendingTransition.insertOne(data)
+      console.log(data)
+      res.send(result)
+    })
+
+
+
+
+
+
+
+
+
+
+
+
     app.get('/', (req, res) => {
       res.send('Hello World!')
     })
