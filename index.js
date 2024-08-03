@@ -266,11 +266,11 @@ async function run() {
       res.send(result)
     })
 
-    // post cash in details 
+    // post cash in details ---------------------------------------
 
     app.post("/cashIn", async (req, res) => {
       const data = req.body
-      const existingRequest = await pendingTransition.findOne({userEmail : data.userEmail} );
+      const existingRequest = await pendingTransition.findOne({ userEmail: data.userEmail, type: "cashIn" });
       if (existingRequest) {
         return res.status(400).json({ error: 'A cash-in request has already been made for this user.' });
       }
@@ -279,6 +279,13 @@ async function run() {
       res.send(result)
     })
 
+
+    //  pending transitions  requests --------------------------------------------------
+    app.get("/pendingTransitions", async(req, res)=>{
+      const {email} = req.params
+      console.log(email)
+      res.send("hello")
+    })
 
 
 
