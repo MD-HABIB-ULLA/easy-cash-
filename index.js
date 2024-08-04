@@ -282,9 +282,10 @@ async function run() {
 
     //  pending transitions  requests --------------------------------------------------
     app.get("/pendingTransitions", async(req, res)=>{
-      const {email} = req.params
+      const {email} = req.query
       console.log(email)
-      res.send("hello")
+      const result = await pendingTransition.find({userEmail : email}).toArray()
+      res.send(result)
     })
 
 
