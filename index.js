@@ -281,10 +281,29 @@ async function run() {
 
 
     //  pending transitions  requests --------------------------------------------------
-    app.get("/pendingTransitions", async(req, res)=>{
-      const {email} = req.query
+    app.get("/pendingTransitions", async (req, res) => {
+      const { email } = req.query
       console.log(email)
-      const result = await pendingTransition.find({userEmail : email}).toArray()
+      const result = await pendingTransition.find({ userEmail: email }).toArray()
+      res.send(result)
+    })
+    app.delete("/deletePendingTransition", async (req, res) => {
+      const { email, pin, id } = req.query
+
+      // find the user throw email
+      const userData = await userCollection.findOne({ email: email })
+      if (!userData) {
+        return res.status(404).send('User not found');
+      }
+
+      const isPinValid = await bcrypt.compare(pin, userData.pin);
+      if (!isPinValid) {
+        return res.status(401).send('Invalid PIN');
+      }
+
+      const result = await pendingTransition.deleteOne({ _id: new ObjectId(id) })
+
+      // console.log(email, pin, id)
       res.send(result)
     })
 
