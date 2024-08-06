@@ -309,7 +309,12 @@ async function run() {
 
 
 
-
+    // cash out api ------------------------------------------------------------
+    app.post("/cashOut", verifytoken, async (req, res) => {
+      const data = req.body
+      console.log(data)
+      res.send("hello")
+    })
 
 
 
