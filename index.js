@@ -314,6 +314,13 @@ async function run() {
       const data = req.body
       console.log(data)
       res.send("hello")
+    }) 
+
+    // send money api -=----------------------------------------------------------g
+    app.post("/sendMoney", verifytoken, async (req, res) => {
+      const data = req.body
+      console.log(data)
+      res.send("hello")
     })
 
 
