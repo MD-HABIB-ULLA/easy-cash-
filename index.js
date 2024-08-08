@@ -15,7 +15,7 @@ app.use(cors({
 app.use(express.json())
 
 
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId, Transaction } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zqymdgy.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -314,16 +314,85 @@ async function run() {
       const data = req.body
       console.log(data)
       res.send("hello")
-    }) 
+    })
 
     // send money api -=----------------------------------------------------------g
     app.post("/sendMoney", verifytoken, async (req, res) => {
       const data = req.body
-      console.log(data)
-      res.send("hello")
+      const email = data.userEmail
+      const pin = data.pin
+      const amount = data.amount
+      const receiverEmail = data.receiverEmail
+      const receiverPhoneNumber = data.phoneNumber
+      if (amount >= 100) {
+        data.fee = 5
+      }
+      // console.log(data)
+      // find the user who send the money 
+      const userData = await userCollection.findOne({ email: email })
+      if (!userData) {
+        return res.status(404).send('User not found');
+      }
+
+      //  find the receiver through email & phone number, who receive the money 
+      let receiverData;
+      if (receiverEmail) {
+        receiverData = await userCollection.findOne({ email: receiverEmail });
+        if (!receiverData) {
+          return res.status(404).send('Receiver is not valid.');
+        }
+      } else {
+        receiverData = await userCollection.findOne({ phoneNumber: receiverPhoneNumber });
+        if (!receiverData) {
+          return res.status(404).send('Receiver is not valid.');
+        }
+      }
+
+      // Validate PIN
+      const isPinValid = await bcrypt.compare(pin, userData.pin);
+      if (!isPinValid) {
+        return res.status(401).send('Invalid PIN');
+      }
+
+      // Deduct the amount from the sender's balance
+      try {
+        await userCollection.updateOne(
+          { _id: userData._id },
+          { $inc: { balance: -(amount >= 100 ? amount + 5 : amount) } }
+        );
+      } catch (error) {
+        return res.status(500).send('Failed to deduct amount from sender');
+      }
+
+      // Add the amount to the receiver's balance
+      try {
+        await userCollection.updateOne(
+          { _id: receiverData._id },
+          { $inc: { balance: amount } }
+        );
+      } catch (error) {
+        // Rollback sender's balance update in case of failure
+        await userCollection.updateOne(
+          { _id: userData._id },
+          { $inc: { balance: amount } }
+        );
+        return res.status(500).send('Failed to credit amount to receiver');
+      }
+
+      const result = await allTransitions.insertOne(data)
+
+
+      // console.log(email, pin, amount)
+      res.send(result)
     })
 
-
+    //  get all the transaction of an user 
+    app.get("/userSelfTransaction", verifytoken, async (req, res) => {
+      const { email } = req.query
+      // console.log(email)
+      const result = await allTransitions.find({ userEmail: email }).toArray()
+      res.send(result)
+    })
 
 
 
