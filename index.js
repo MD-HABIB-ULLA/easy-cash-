@@ -270,10 +270,36 @@ async function run() {
 
     app.post("/cashIn", async (req, res) => {
       const data = req.body
+      const agentEmail = req.body.agentEmail
+      const agentPhoneNumber = data.phoneNumber
+      let query
+      if (agentEmail) {
+        query = {
+          email: agentEmail,
+          role: "agent"
+
+        }
+      } else {
+        query = {
+          phoneNumber: agentPhoneNumber,
+          role: "agent"
+        }
+      }
+
+
+      // identify is there any cash in request exist in data base to this user 
+
       const existingRequest = await pendingTransition.findOne({ userEmail: data.userEmail, type: "cashIn" });
       if (existingRequest) {
         return res.status(400).json({ error: 'A cash-in request has already been made for this user.' });
       }
+
+      // validate the agent details 
+      const validateAgent = await userCollection.findOne(query)
+      if(!validateAgent){
+        return res.status(400).json({ error: 'please enter valid agent details ' });
+      }
+      
       const result = await pendingTransition.insertOne(data)
       console.log(data)
       res.send(result)
@@ -312,7 +338,16 @@ async function run() {
     // cash out api ------------------------------------------------------------
     app.post("/cashOut", verifytoken, async (req, res) => {
       const data = req.body
+      const email = data.userEmail
+      const pin = data.pin
+      const amount = data.amount
+      const agentEmail = data.agentEmail
+      const agentPhoneNumber = data.phoneNumber
+      if (amount) {
+        data.fee = amount * 0.015
+      }
       console.log(data)
+
       res.send("hello")
     })
 
