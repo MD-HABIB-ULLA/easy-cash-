@@ -296,10 +296,10 @@ async function run() {
 
       // validate the agent details 
       const validateAgent = await userCollection.findOne(query)
-      if(!validateAgent){
+      if (!validateAgent) {
         return res.status(400).json({ error: 'please enter valid agent details ' });
       }
-      
+
       const result = await pendingTransition.insertOne(data)
       console.log(data)
       res.send(result)
@@ -346,9 +346,54 @@ async function run() {
       if (amount) {
         data.fee = amount * 0.015
       }
-      console.log(data)
+      let query
+      if (agentEmail) {
+        query = {
+          email: agentEmail,
+          role: "agent"
 
-      res.send("hello")
+        }
+      } else {
+        query = {
+          phoneNumber: agentPhoneNumber,
+          role: "agent"
+        }
+      }
+
+
+      // identify is there any cash out request is pending in data base 
+      const existingRequest = await pendingTransition.findOne({ userEmail: email, type: "cashOut" });
+      if (existingRequest) {
+        return res.status(400).json({ error: 'A cash-out request has already been made for this user.' });
+      }
+
+      // validate the agent details 
+      const validateAgent = await userCollection.findOne(query)
+      if (!validateAgent) {
+        return res.status(400).json({ error: 'please enter valid agent details ' });
+      }
+
+      // Validate PIN
+
+      const getUserDataByEmail = async (email) => {
+        return await userCollection.findOne({ email });
+      };
+
+      const userData = await getUserDataByEmail(email);
+      if (!userData) {
+        return res.status(404).send('User not found');
+      }
+      const isPinValid = await bcrypt.compare(pin, userData.pin);
+      if (!isPinValid) {
+        return res.status(401).send('Invalid PIN');
+      }
+      delete data.pin;
+
+      console.log(data)
+      const result = await pendingTransition.insertOne(data)
+
+
+      res.send(result)
     })
 
     // send money api -=----------------------------------------------------------g
