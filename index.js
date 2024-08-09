@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 require('dotenv').config()
 app.use(cors({
   origin: [
+    "https://easycash.netlify.app",
     'http://localhost:5173',
   ],
   credentials: true
@@ -458,6 +459,7 @@ async function run() {
         );
         return res.status(500).send('Failed to credit amount to receiver');
       }
+      delete data.pin
 
       const result = await allTransitions.insertOne(data)
 
@@ -473,7 +475,116 @@ async function run() {
       const result = await allTransitions.find({ userEmail: email }).toArray()
       res.send(result)
     })
+    app.get("/agentTransaction", verifytoken, async (req, res) => {
+      const { email, phoneNumber } = req.query
 
+      // console.log(email)
+      const result = await allTransitions.find({
+        $or: [
+          { agentEmail: email },
+          { phoneNumber: phoneNumber }
+        ]
+      }).toArray()
+      res.send(result)
+    })
+
+    // get the agent pending transaction
+    app.get("/agentPendingTransactions", verifytoken, async (req, res) => {
+      const { email, phoneNumber } = req.query
+      // console.log(email, phoneNumber)
+      const result = await pendingTransition.find({
+        $or: [
+          { agentEmail: email },
+          { phoneNumber: phoneNumber }
+        ]
+      }).toArray()
+      res.send(result)
+    })
+
+
+
+    // agent approve the transactions 
+    app.post("/agentApprove", verifytoken, async (req, res) => {
+      const { pin, email, approveId } = req.body
+
+      // get requestor data 
+      const requestorData = await pendingTransition.findOne({ _id: new ObjectId(approveId) })
+
+      // get agent details 
+      const agentData = await userCollection.findOne({ email: email })
+
+      // pin validation
+      const isPinValid = await bcrypt.compare(pin, agentData.pin);
+      if (!isPinValid) {
+        return res.status(401).send('Invalid PIN');
+      }
+      if (requestorData.type === "cashOut") {
+        // if cash out then here first cradit with fee minus from the  requestor account and add the cradit with fee  into the agent account and lastly add the transaction data in database, here i have two transaction  data base one is agent and another is user transaction
+
+        try {
+          await userCollection.updateOne(
+            { email: requestorData.userEmail },
+            { $inc: { balance: -(requestorData.amount + (requestorData.amount * 0.015)) } }
+          );
+        } catch (error) {
+          return res.status(500).send('Failed to deduct amount from sender');
+        }
+
+
+        try {
+          await userCollection.updateOne(
+            { email: email },
+            { $inc: { balance: (requestorData.amount + (requestorData.amount * 0.015)) } }
+          );
+        } catch (error) {
+          // Rollback sender's balance update in case of failure
+          await userCollection.updateOne(
+            { email: requestorData.userEmail },
+            { $inc: { balance: (requestorData.amount + (requestorData.amount * 0.015)) } }
+          );
+          return res.status(500).send('Failed to credit amount to receiver');
+        }
+        const addToTransaction = await allTransitions.insertOne(requestorData)
+        const result = await pendingTransition.deleteOne({ _id: new ObjectId(approveId) })
+
+        // console.log(pin, email, approveId, requestorData, agentData)
+        res.send(result)
+      } else {
+        // if cash in then amount minus from the agent account and add the balance to the user account 
+        try {
+          await userCollection.updateOne(
+            { email: email },
+            { $inc: { balance: -requestorData.amount } }
+          );
+        } catch (error) {
+          return res.status(500).send('Failed to deduct amount from sender');
+        }
+
+
+        try {
+          await userCollection.updateOne(
+            { email: requestorData.userEmail },
+            { $inc: { balance: requestorData.amount } }
+          );
+        } catch (error) {
+          // Rollback sender's balance update in case of failure
+          await userCollection.updateOne(
+            { email: email },
+            { $inc: { balance: requestorData.amount } }
+          );
+          return res.status(500).send('Failed to credit amount to receiver');
+        }
+        const addToTransaction = await allTransitions.insertOne(requestorData)
+        const result = await pendingTransition.deleteOne({ _id: new ObjectId(approveId) })
+
+        // console.log(pin, email, approveId, requestorData, agentData)
+        res.send(result)
+
+
+      }
+
+
+    })
 
 
 
